@@ -8,28 +8,38 @@ interface Props {
   height: number
 }
 
+// Spinner for loading state
+const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
 export default function ApiKeyDialog({ width, height }: Props) {
   const { theme, setApiKey, testConnection, setDialog, loadModels } = useStore()
   
   const [apiKey, setApiKeyValue] = useState('')
   const [status, setStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState('')
+  const [spinnerFrame, setSpinnerFrame] = useState(0)
+  
+  // Spinner animation
+  React.useEffect(() => {
+    if (status === 'testing') {
+      const interval = setInterval(() => {
+        setSpinnerFrame((f) => (f + 1) % SPINNER.length)
+      }, 80)
+      return () => clearInterval(interval)
+    }
+  }, [status])
   
   useInput(async (input, key) => {
     if (key.return && apiKey.trim()) {
       setStatus('testing')
-      
-      // Set the key
       setApiKey(apiKey.trim())
       
-      // Test connection
       const success = await testConnection()
       
       if (success) {
         setStatus('success')
         await loadModels()
-        // Close dialog after short delay
-        setTimeout(() => setDialog('none'), 1000)
+        setTimeout(() => setDialog('none'), 800)
       } else {
         setStatus('error')
         setErrorMessage('Invalid API key or connection failed')
@@ -38,65 +48,72 @@ export default function ApiKeyDialog({ width, height }: Props) {
   })
   
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <Box flexDirection="column" width={width} height={height}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text color={theme.primary} bold>
-          OpenRouter API Key
-        </Text>
+        <Text color={theme.accent} bold>OpenRouter API Key</Text>
       </Box>
       
       {/* Instructions */}
       <Box flexDirection="column" marginBottom={1}>
-        <Text color={theme.text}>
-          Enter your OpenRouter API key to connect.
-        </Text>
-        <Text color={theme.textMuted}>
-          Get one at{' '}
-          <Text color={theme.info}>https://openrouter.ai/keys</Text>
-        </Text>
+        <Text color={theme.text}>Enter your API key to connect.</Text>
+        <Box>
+          <Text color={theme.textMuted}>Get one at </Text>
+          <Text color={theme.info}>openrouter.ai/keys</Text>
+        </Box>
       </Box>
       
       {/* Input */}
       <Box marginBottom={1}>
-        <Text color={theme.textMuted}>API Key: </Text>
+        <Text color={theme.accent}>❯</Text>
+        <Text> </Text>
         <TextInput
           value={apiKey}
           onChange={setApiKeyValue}
           placeholder="sk-or-..."
           focus={status !== 'success'}
-          mask="*"
+          mask="•"
         />
       </Box>
       
       {/* Status */}
-      <Box marginBottom={1}>
+      <Box marginBottom={1} height={1}>
         {status === 'testing' && (
-          <Text color={theme.warning}>Testing connection...</Text>
+          <>
+            <Text color={theme.warning}>{SPINNER[spinnerFrame]}</Text>
+            <Text color={theme.warning}> Testing connection...</Text>
+          </>
         )}
         {status === 'success' && (
-          <Text color={theme.success}>✓ Connected successfully!</Text>
+          <>
+            <Text color={theme.success}>●</Text>
+            <Text color={theme.success}> Connected!</Text>
+          </>
         )}
         {status === 'error' && (
-          <Text color={theme.error}>✗ {errorMessage}</Text>
+          <>
+            <Text color={theme.error}>●</Text>
+            <Text color={theme.error}> {errorMessage}</Text>
+          </>
         )}
       </Box>
       
-      {/* Environment variable hint */}
+      {/* Environment hint */}
       <Box flexDirection="column" marginTop={1}>
-        <Text color={theme.textMuted}>
-          Tip: Set OPENROUTER_API_KEY environment variable
-        </Text>
-        <Text color={theme.textMuted}>
-          to avoid entering key each time.
-        </Text>
+        <Text color={theme.border}>─</Text>
+        <Box marginTop={1}>
+          <Text color={theme.textMuted}>Tip: Set </Text>
+          <Text color={theme.info}>OPENROUTER_API_KEY</Text>
+          <Text color={theme.textMuted}> env var</Text>
+        </Box>
       </Box>
       
       {/* Footer */}
-      <Box marginTop={1} borderStyle="single" borderColor={theme.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingTop={0}>
-        <Text color={theme.textMuted}>
-          enter: submit · esc: close (without key)
-        </Text>
+      <Box marginTop={1}>
+        <Text color={theme.accent}>enter</Text>
+        <Text color={theme.textMuted}> submit </Text>
+        <Text color={theme.accent}>esc</Text>
+        <Text color={theme.textMuted}> close</Text>
       </Box>
     </Box>
   )

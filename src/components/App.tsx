@@ -10,16 +10,7 @@ import Footer from './Footer.js'
 import TabBar from './TabBar.js'
 import Dialog from './Dialog.js'
 
-// Vertical separator component
-function VerticalSeparator({ height, color }: { height: number; color: string }) {
-  return (
-    <Box flexDirection="column" width={1}>
-      {Array.from({ length: height }).map((_, i) => (
-        <Text key={i} color={color}>│</Text>
-      ))}
-    </Box>
-  )
-}
+const SIDEBAR_WIDTH = 27
 
 export default function App() {
   const { width, height } = useTerminalSize()
@@ -76,7 +67,7 @@ export default function App() {
   
   // Global keybindings
   useInput((input, key) => {
-    // Always allow Ctrl+C to quit
+    // Always allow Ctrl+C to quit or cancel streaming
     if (key.ctrl && input === 'c') {
       if (isStreaming) {
         cancelStreaming()
@@ -88,7 +79,6 @@ export default function App() {
     
     // Skip if dialog is open (dialog handles its own keys)
     if (dialog !== 'none') {
-      // Escape closes dialog
       if (key.escape) {
         setDialog('none')
       }
@@ -117,7 +107,7 @@ export default function App() {
         return
       }
       
-      // Dialogs - Command palette (Ctrl+P or :)
+      // Command palette (Ctrl+P or :)
       if ((key.ctrl && input === 'p') || input === ':') {
         setDialog('command')
         return
@@ -193,8 +183,11 @@ export default function App() {
     }
   })
   
-  // Calculate content height for separator
-  const contentHeight = height - 2 - (tabs.length > 1 ? 1 : 0) // header + footer + tabs
+  // Calculate layout dimensions
+  const headerHeight = 1
+  const footerHeight = 1
+  const tabBarHeight = tabs.length > 1 ? 1 : 0
+  const contentHeight = height - headerHeight - footerHeight - tabBarHeight
   
   return (
     <Box
@@ -202,26 +195,38 @@ export default function App() {
       width={width}
       height={height}
     >
+      {/* Header */}
       <Header />
       
+      {/* Tab bar (if multiple tabs) */}
       {tabs.length > 1 && <TabBar />}
       
-      <Box flexGrow={1} flexDirection="row">
+      {/* Main content area */}
+      <Box flexGrow={1} flexDirection="row" height={contentHeight}>
+        {/* Sidebar */}
         {sidebarVisible && (
           <>
             <Sidebar />
-            <VerticalSeparator height={contentHeight} color={theme.border} />
+            {/* Vertical separator */}
+            <Box flexDirection="column" width={1}>
+              {Array.from({ length: contentHeight }).map((_, i) => (
+                <Text key={i} color={theme.border}>│</Text>
+              ))}
+            </Box>
           </>
         )}
         
+        {/* Main content (Messages + Input) */}
         <Box flexDirection="column" flexGrow={1}>
           <Messages />
           <Input />
         </Box>
       </Box>
       
+      {/* Footer */}
       <Footer />
       
+      {/* Dialog overlay */}
       {dialog !== 'none' && <Dialog />}
     </Box>
   )

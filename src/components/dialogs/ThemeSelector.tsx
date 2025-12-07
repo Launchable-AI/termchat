@@ -19,8 +19,10 @@ export default function ThemeSelector({ width, height }: Props) {
   const selectedThemeName = availableThemes[selectedIndex]
   const previewTheme = getTheme(selectedThemeName)
   
+  const maxVisible = height - 4
+  const scrollOffset = Math.max(0, selectedIndex - maxVisible + 3)
+  
   useInput((input, key) => {
-    // Navigation
     if (key.downArrow || input === 'j') {
       setSelectedIndex((i) => Math.min(i + 1, availableThemes.length - 1))
       return
@@ -29,8 +31,6 @@ export default function ThemeSelector({ width, height }: Props) {
       setSelectedIndex((i) => Math.max(i - 1, 0))
       return
     }
-    
-    // Select theme
     if (key.return) {
       setTheme(selectedThemeName)
       setDialog('none')
@@ -38,56 +38,66 @@ export default function ThemeSelector({ width, height }: Props) {
     }
   })
   
+  const listWidth = 18
+  const previewWidth = width - listWidth - 3
+  
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <Box flexDirection="column" width={width} height={height}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text color={theme.primary} bold>
-          Select Theme
-        </Text>
+        <Text color={theme.accent} bold>Theme</Text>
+        <Text color={theme.border}> │ </Text>
+        <Text color={theme.textMuted}>{availableThemes.length} themes</Text>
       </Box>
       
-      {/* Theme list */}
-      <Box flexDirection="row" height={height - 4}>
-        {/* List */}
-        <Box flexDirection="column" width={20}>
-          {availableThemes.map((name, i) => {
-            const isSelected = i === selectedIndex
+      {/* Two-column layout */}
+      <Box flexDirection="row" height={maxVisible}>
+        {/* Theme list */}
+        <Box flexDirection="column" width={listWidth}>
+          {availableThemes.slice(scrollOffset, scrollOffset + maxVisible).map((name, i) => {
+            const actualIndex = i + scrollOffset
+            const isSelected = actualIndex === selectedIndex
             const isCurrent = name === themeName
             const displayName = themes[name]?.name || name
             
             return (
               <Box key={name}>
-                <Text color={isSelected ? theme.accent : theme.text}>
-                  {isSelected ? '› ' : '  '}
+                <Text color={isSelected ? theme.accent : theme.textMuted}>
+                  {isSelected ? '▸' : ' '}
                 </Text>
+                <Text> </Text>
                 <Text
-                  color={isSelected ? theme.accent : isCurrent ? theme.success : theme.text}
+                  color={isSelected ? theme.text : isCurrent ? theme.success : theme.textMuted}
                   bold={isSelected}
                 >
                   {displayName}
                 </Text>
-                {isCurrent && (
-                  <Text color={theme.success}> ✓</Text>
-                )}
+                {isCurrent && <Text color={theme.success}> ●</Text>}
               </Box>
             )
           })}
         </Box>
         
+        {/* Separator */}
+        <Box flexDirection="column" width={1} marginX={1}>
+          {Array.from({ length: maxVisible }).map((_, i) => (
+            <Text key={i} color={theme.border}>│</Text>
+          ))}
+        </Box>
+        
         {/* Preview */}
-        <Box flexDirection="column" marginLeft={2} flexGrow={1}>
-          <Text color={theme.textMuted}>Preview:</Text>
+        <Box flexDirection="column" width={previewWidth}>
+          <Text color={theme.textMuted} dimColor>Preview</Text>
           <Box marginTop={1} flexDirection="column">
             <Box>
-              <Text color={previewTheme.primary}>Primary </Text>
-              <Text color={previewTheme.secondary}>Secondary </Text>
-              <Text color={previewTheme.accent}>Accent</Text>
+              <Text color={previewTheme.accent}>accent </Text>
+              <Text color={previewTheme.primary}>primary </Text>
+              <Text color={previewTheme.secondary}>secondary</Text>
             </Box>
             <Box>
-              <Text color={previewTheme.success}>Success </Text>
-              <Text color={previewTheme.warning}>Warning </Text>
-              <Text color={previewTheme.error}>Error</Text>
+              <Text color={previewTheme.success}>success </Text>
+              <Text color={previewTheme.warning}>warning </Text>
+              <Text color={previewTheme.error}>error</Text>
             </Box>
             <Box marginTop={1}>
               <Text color={previewTheme.text}>Regular text</Text>
@@ -97,19 +107,24 @@ export default function ThemeSelector({ width, height }: Props) {
             </Box>
             <Box marginTop={1}>
               <Text color={previewTheme.syntaxKeyword}>const </Text>
-              <Text color={previewTheme.syntaxVariable}>foo </Text>
+              <Text color={previewTheme.syntaxVariable}>x </Text>
               <Text color={previewTheme.syntaxOperator}>= </Text>
-              <Text color={previewTheme.syntaxString}>"bar"</Text>
+              <Text color={previewTheme.syntaxString}>"hello"</Text>
             </Box>
           </Box>
         </Box>
       </Box>
       
       {/* Footer */}
-      <Box marginTop={1} borderStyle="single" borderColor={theme.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingTop={0}>
-        <Text color={theme.textMuted}>
-          enter: select · j/k: navigate · esc: close
-        </Text>
+      <Box marginTop={1}>
+        <Text color={theme.border}>─</Text>
+        <Text color={theme.textMuted}> </Text>
+        <Text color={theme.accent}>enter</Text>
+        <Text color={theme.textMuted}> select </Text>
+        <Text color={theme.accent}>j/k</Text>
+        <Text color={theme.textMuted}> navigate </Text>
+        <Text color={theme.accent}>esc</Text>
+        <Text color={theme.textMuted}> close</Text>
       </Box>
     </Box>
   )

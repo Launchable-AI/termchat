@@ -12,9 +12,8 @@ interface Props {
 interface Command {
   id: string
   title: string
-  description: string
-  keybind?: string
-  category: string
+  desc: string
+  key?: string
   action: () => void
 }
 
@@ -37,120 +36,90 @@ export default function CommandPalette({ width, height }: Props) {
     {
       id: 'session.new',
       title: 'New Session',
-      description: 'Start a new chat session',
-      keybind: 'n',
-      category: 'Session',
-      action: () => {
-        createSession()
-        setDialog('none')
-      },
+      desc: 'Start a new chat',
+      key: 'n',
+      action: () => { createSession(); setDialog('none') },
     },
     {
       id: 'session.list',
       title: 'Session List',
-      description: 'Browse and switch sessions',
-      keybind: 's',
-      category: 'Session',
+      desc: 'Browse sessions',
+      key: 's',
       action: () => setDialog('sessions'),
     },
     {
       id: 'session.sidebar',
       title: 'Toggle Sidebar',
-      description: 'Show/hide session sidebar',
-      keybind: 'b',
-      category: 'Session',
-      action: () => {
-        toggleSidebar()
-        setDialog('none')
-      },
+      desc: 'Show/hide sidebar',
+      key: 'b',
+      action: () => { toggleSidebar(); setDialog('none') },
     },
     {
       id: 'model.select',
       title: 'Select Model',
-      description: 'Choose a different AI model',
-      keybind: 'm',
-      category: 'Model',
+      desc: 'Choose AI model',
+      key: 'm',
       action: () => setDialog('models'),
     },
     {
       id: 'theme.select',
       title: 'Select Theme',
-      description: 'Change color theme',
-      keybind: 'T',
-      category: 'Theme',
+      desc: 'Change colors',
+      key: 'T',
       action: () => setDialog('themes'),
     },
     {
       id: 'theme.cycle',
       title: 'Cycle Theme',
-      description: 'Switch to next theme',
-      keybind: 't',
-      category: 'Theme',
-      action: () => {
-        cycleTheme()
-        setDialog('none')
-      },
+      desc: 'Next theme',
+      key: 't',
+      action: () => { cycleTheme(); setDialog('none') },
     },
     {
       id: 'help',
       title: 'Help',
-      description: 'Show keybinding help',
-      keybind: '?',
-      category: 'General',
+      desc: 'Keybindings',
+      key: '?',
       action: () => setDialog('help'),
     },
     {
       id: 'apikey',
-      title: 'Configure API Key',
-      description: 'Set OpenRouter API key',
-      category: 'Settings',
+      title: 'API Key',
+      desc: 'Configure OpenRouter',
       action: () => setDialog('apikey'),
     },
-    ...(isStreaming
-      ? [
-          {
-            id: 'cancel',
-            title: 'Cancel Streaming',
-            description: 'Stop current response',
-            keybind: 'Ctrl+c',
-            category: 'General',
-            action: () => {
-              cancelStreaming()
-              setDialog('none')
-            },
-          },
-        ]
-      : []),
+    ...(isStreaming ? [{
+      id: 'cancel',
+      title: 'Cancel',
+      desc: 'Stop streaming',
+      key: '^c',
+      action: () => { cancelStreaming(); setDialog('none') },
+    }] : []),
     {
       id: 'quit',
       title: 'Quit',
-      description: 'Exit TermChat',
-      keybind: 'q',
-      category: 'General',
+      desc: 'Exit termchat',
+      key: 'q',
       action: () => process.exit(0),
     },
   ], [isStreaming])
   
   // Filter commands
   const filteredCommands = useMemo(() => {
-    if (!query.trim()) {
-      return commands
-    }
+    if (!query.trim()) return commands
     
     const results = fuzzysort.go(query, commands, {
-      keys: ['title', 'description', 'category'],
+      keys: ['title', 'desc'],
       limit: 20,
     })
-    
     return results.map((r) => r.obj)
   }, [query, commands])
   
-  const clampedIndex = Math.min(selectedIndex, filteredCommands.length - 1)
-  const maxVisible = height - 5
+  const clampedIndex = Math.min(selectedIndex, Math.max(0, filteredCommands.length - 1))
+  const maxVisible = height - 4
   const scrollOffset = Math.max(0, clampedIndex - maxVisible + 2)
   
   useInput((input, key) => {
-    // Navigation
     if (key.downArrow || (key.ctrl && input === 'n')) {
       setSelectedIndex((i) => Math.min(i + 1, filteredCommands.length - 1))
       return
@@ -159,47 +128,27 @@ export default function CommandPalette({ width, height }: Props) {
       setSelectedIndex((i) => Math.max(i - 1, 0))
       return
     }
-    
-    // Execute command
     if (key.return) {
       const cmd = filteredCommands[clampedIndex]
-      if (cmd) {
-        cmd.action()
-      }
+      if (cmd) cmd.action()
       return
     }
   })
   
-  // Group by category
-  const groupedCommands = useMemo(() => {
-    const groups: Record<string, Command[]> = {}
-    for (const cmd of filteredCommands) {
-      if (!groups[cmd.category]) {
-        groups[cmd.category] = []
-      }
-      groups[cmd.category].push(cmd)
-    }
-    return groups
-  }, [filteredCommands])
-  
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <Box flexDirection="column" width={width} height={height}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text color={theme.primary} bold>
-          Command Palette
-        </Text>
+        <Text color={theme.accent} bold>Commands</Text>
       </Box>
       
       {/* Search */}
       <Box marginBottom={1}>
-        <Text color={theme.textMuted}>› </Text>
+        <Text color={theme.accent}>❯</Text>
+        <Text> </Text>
         <TextInput
           value={query}
-          onChange={(v) => {
-            setQuery(v)
-            setSelectedIndex(0)
-          }}
+          onChange={(v) => { setQuery(v); setSelectedIndex(0) }}
           placeholder="Type a command..."
           focus={true}
         />
@@ -212,41 +161,36 @@ export default function CommandPalette({ width, height }: Props) {
           const isSelected = actualIndex === clampedIndex
           
           return (
-            <Box key={cmd.id} justifyContent="space-between">
-              <Box>
-                <Text color={isSelected ? theme.accent : theme.text}>
-                  {isSelected ? '› ' : '  '}
-                </Text>
-                <Text
-                  color={isSelected ? theme.accent : theme.text}
-                  bold={isSelected}
-                >
-                  {cmd.title}
-                </Text>
-                <Text color={theme.textMuted}> - {cmd.description}</Text>
-              </Box>
-              
-              {cmd.keybind && (
-                <Text color={theme.textMuted}>
-                  {cmd.keybind}
-                </Text>
-              )}
+            <Box key={cmd.id}>
+              <Text color={isSelected ? theme.accent : theme.textMuted}>
+                {isSelected ? '▸' : ' '}
+              </Text>
+              <Text> </Text>
+              <Text color={isSelected ? theme.text : theme.textMuted} bold={isSelected}>
+                {cmd.title}
+              </Text>
+              <Text color={theme.border}> - </Text>
+              <Text color={theme.textMuted}>{cmd.desc}</Text>
+              <Box flexGrow={1} />
+              {cmd.key && <Text color={theme.border}>{cmd.key}</Text>}
             </Box>
           )
         })}
-        
         {filteredCommands.length === 0 && (
-          <Text color={theme.textMuted}>
-            No commands found
-          </Text>
+          <Text color={theme.textMuted}>No commands found</Text>
         )}
       </Box>
       
       {/* Footer */}
-      <Box marginTop={1} borderStyle="single" borderColor={theme.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingTop={0}>
-        <Text color={theme.textMuted}>
-          enter: execute · ↑/↓: navigate · esc: close
-        </Text>
+      <Box marginTop={1}>
+        <Text color={theme.border}>─</Text>
+        <Text color={theme.textMuted}> </Text>
+        <Text color={theme.accent}>enter</Text>
+        <Text color={theme.textMuted}> run </Text>
+        <Text color={theme.accent}>↑/↓</Text>
+        <Text color={theme.textMuted}> navigate </Text>
+        <Text color={theme.accent}>esc</Text>
+        <Text color={theme.textMuted}> close</Text>
       </Box>
     </Box>
   )

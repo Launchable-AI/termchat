@@ -1,7 +1,15 @@
-import React, { useState, useEffect } from 'react'
-import { Box, Text, useInput, useFocus } from 'ink'
+import React from 'react'
+import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import { useStore } from '../hooks/useStore.js'
+import { useTerminalSize } from '../hooks/useTerminalSize.js'
+
+// Custom prompt characters
+const PROMPT_CHARS = {
+  active: '┃',
+  inactive: '┃',
+  bottom: '╹',
+}
 
 export default function Input() {
   const {
@@ -14,10 +22,15 @@ export default function Input() {
     isStreaming,
     dialog,
     setDialog,
+    sidebarVisible,
   } = useStore()
+  const { width } = useTerminalSize()
   
-  const { isFocused } = useFocus({ autoFocus: mode === 'insert' })
   const isActive = mode === 'insert' && dialog === 'none'
+  
+  // Calculate input width
+  const sidebarWidth = sidebarVisible ? 28 : 0
+  const inputWidth = width - sidebarWidth - (sidebarVisible ? 1 : 0)
   
   // Handle input submission
   const handleSubmit = async (value: string) => {
@@ -55,11 +68,9 @@ export default function Input() {
           return
         case 'clear':
         case 'c':
-          // Clear current session messages
           const session = useStore.getState().getCurrentSession()
           if (session) {
             useStore.getState().updateSessionTitle(session.id, 'New Chat')
-            // Storage doesn't have clearMessages, so we'd need to add it
           }
           setInputValue('')
           return
@@ -67,7 +78,6 @@ export default function Input() {
         case 'q':
           process.exit(0)
         default:
-          // Unknown command, show help
           useStore.getState().setError(`Unknown command: /${cmd}. Type /help for available commands.`)
           setInputValue('')
           return
@@ -78,18 +88,16 @@ export default function Input() {
     await sendMessage(trimmed)
   }
   
-  // Handle special key combinations when in insert mode
+  // Handle special keys in insert mode
   useInput(
     (input, key) => {
       if (!isActive) return
       
-      // Submit on Enter
       if (key.return && !key.shift) {
         handleSubmit(inputValue)
         return
       }
       
-      // Exit insert mode on Escape
       if (key.escape) {
         setMode('normal')
         return
@@ -98,30 +106,53 @@ export default function Input() {
     { isActive }
   )
   
-  const bg = theme.backgroundPanel
+  const accentColor = isActive ? theme.accent : theme.border
+  const promptText = isActive 
+    ? 'Type a message...' 
+    : 'Press i or Enter to type...'
   
   return (
-    <Box flexDirection="row" alignItems="center">
-      <Text color={isActive ? theme.accent : theme.textMuted} backgroundColor={bg}>
-        {'  █ '}
-      </Text>
+    <Box flexDirection="column" width={inputWidth} paddingX={1}>
+      {/* Top border line */}
+      <Box>
+        <Text color={theme.border}>{'─'.repeat(inputWidth - 2)}</Text>
+      </Box>
       
-      {isActive ? (
-        <Box flexGrow={1}>
-          <TextInput
-            value={inputValue}
-            onChange={setInputValue}
-            placeholder="Type a message..."
-            focus={true}
-          />
-        </Box>
-      ) : (
-        <Box flexGrow={1}>
-          <Text color={theme.textMuted} backgroundColor={bg}>
-            {inputValue || 'Press i or Enter to type...'}
+      {/* Input row */}
+      <Box>
+        <Text color={accentColor}>{PROMPT_CHARS.active}</Text>
+        <Text color={theme.backgroundPanel}> </Text>
+        
+        {isActive ? (
+          <Box flexGrow={1}>
+            <TextInput
+              value={inputValue}
+              onChange={setInputValue}
+              placeholder={promptText}
+              focus={true}
+            />
+          </Box>
+        ) : (
+          <Box flexGrow={1}>
+            <Text color={theme.textMuted}>
+              {inputValue || promptText}
+            </Text>
+          </Box>
+        )}
+      </Box>
+      
+      {/* Status row */}
+      <Box>
+        <Text color={accentColor}>{PROMPT_CHARS.bottom}</Text>
+        <Text color={theme.textMuted}> </Text>
+        {isStreaming ? (
+          <Text color={theme.warning}>Streaming... press Ctrl+C to cancel</Text>
+        ) : (
+          <Text color={theme.textMuted}>
+            {isActive ? 'Enter to send, Esc to exit' : 'i to insert, / for commands'}
           </Text>
-        </Box>
-      )}
+        )}
+      </Box>
     </Box>
   )
 }

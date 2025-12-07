@@ -9,6 +9,22 @@ interface Props {
   height: number
 }
 
+// Format relative time
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+  
+  if (diffMins < 1) return 'now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export default function SessionList({ width, height }: Props) {
   const {
     theme,
@@ -26,20 +42,17 @@ export default function SessionList({ width, height }: Props) {
   
   // Filter sessions
   const displaySessions = useMemo(() => {
-    if (!query.trim()) {
-      return sessions
-    }
+    if (!query.trim()) return sessions
     
     const results = fuzzysort.go(query, sessions, {
       keys: ['title'],
       limit: 50,
     })
-    
     return results.map((r) => r.obj)
   }, [query, sessions])
   
-  const clampedIndex = Math.min(selectedIndex, displaySessions.length - 1)
-  const maxVisible = height - 6
+  const clampedIndex = Math.min(selectedIndex, Math.max(0, displaySessions.length - 1))
+  const maxVisible = height - 5
   const scrollOffset = Math.max(0, clampedIndex - maxVisible + 3)
   
   useInput((input, key) => {
@@ -58,7 +71,6 @@ export default function SessionList({ width, height }: Props) {
       return
     }
     
-    // Navigation
     if (key.downArrow || (key.ctrl && input === 'n') || input === 'j') {
       setSelectedIndex((i) => Math.min(i + 1, displaySessions.length - 1))
       return
@@ -67,8 +79,6 @@ export default function SessionList({ width, height }: Props) {
       setSelectedIndex((i) => Math.max(i - 1, 0))
       return
     }
-    
-    // Select session
     if (key.return) {
       const session = displaySessions[clampedIndex]
       if (session) {
@@ -77,17 +87,11 @@ export default function SessionList({ width, height }: Props) {
       }
       return
     }
-    
-    // Delete session
     if (key.ctrl && input === 'd') {
       const session = displaySessions[clampedIndex]
-      if (session) {
-        setConfirmDelete(session.id)
-      }
+      if (session) setConfirmDelete(session.id)
       return
     }
-    
-    // New session
     if (key.ctrl && input === 'n') {
       createSession()
       setDialog('none')
@@ -95,38 +99,19 @@ export default function SessionList({ width, height }: Props) {
     }
   })
   
-  // Format relative time
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-    
-    if (diffMins < 1) return 'now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString()
-  }
-  
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <Box flexDirection="column" width={width} height={height}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text color={theme.primary} bold>
-          Sessions
-        </Text>
-        <Text color={theme.textMuted}> · </Text>
-        <Text color={theme.textMuted}>
-          {sessions.length} total
-        </Text>
+        <Text color={theme.accent} bold>Sessions</Text>
+        <Text color={theme.border}> │ </Text>
+        <Text color={theme.textMuted}>{sessions.length} total</Text>
       </Box>
       
       {/* Search */}
       <Box marginBottom={1}>
-        <Text color={theme.textMuted}>› </Text>
+        <Text color={theme.accent}>❯</Text>
+        <Text> </Text>
         <TextInput
           value={query}
           onChange={setQuery}
@@ -135,11 +120,15 @@ export default function SessionList({ width, height }: Props) {
         />
       </Box>
       
-      {/* Confirmation dialog */}
+      {/* Delete confirmation */}
       {confirmDelete && (
-        <Box marginBottom={1} paddingX={1} borderStyle="single" borderColor={theme.warning}>
-          <Text color={theme.warning}>Delete this session? </Text>
-          <Text color={theme.text}>(y/n)</Text>
+        <Box marginBottom={1}>
+          <Text color={theme.warning}>Delete session?</Text>
+          <Text color={theme.textMuted}> (</Text>
+          <Text color={theme.accent}>y</Text>
+          <Text color={theme.textMuted}>/</Text>
+          <Text color={theme.accent}>n</Text>
+          <Text color={theme.textMuted}>)</Text>
         </Box>
       )}
       
@@ -150,37 +139,32 @@ export default function SessionList({ width, height }: Props) {
           const isSelected = actualIndex === clampedIndex
           const isCurrent = session.id === currentSessionId
           
-          const maxTitleLen = width - 25
+          const timeStr = formatRelativeTime(session.updatedAt)
+          const msgCount = session.messages.length
+          const maxTitleLen = width - timeStr.length - 15
           const displayTitle = session.title.length > maxTitleLen
-            ? session.title.slice(0, maxTitleLen - 3) + '...'
+            ? session.title.slice(0, maxTitleLen - 1) + '…'
             : session.title
           
           return (
-            <Box key={session.id} justifyContent="space-between">
-              <Box>
-                <Text color={isSelected ? theme.accent : theme.text}>
-                  {isSelected ? '› ' : '  '}
-                </Text>
-                <Text
-                  color={isSelected ? theme.accent : isCurrent ? theme.success : theme.text}
-                  bold={isSelected || isCurrent}
-                >
-                  {displayTitle}
-                </Text>
-                {isCurrent && (
-                  <Text color={theme.success}> ●</Text>
-                )}
-              </Box>
-              
-              <Box>
-                <Text color={theme.textMuted}>
-                  {session.messages.length} msgs · {formatTime(session.updatedAt)}
-                </Text>
-              </Box>
+            <Box key={session.id}>
+              <Text color={isSelected ? theme.accent : theme.textMuted}>
+                {isSelected ? '▸' : ' '}
+              </Text>
+              <Text> </Text>
+              <Text
+                color={isSelected ? theme.text : isCurrent ? theme.success : theme.textMuted}
+                bold={isSelected}
+              >
+                {displayTitle}
+              </Text>
+              {isCurrent && <Text color={theme.success}> ●</Text>}
+              <Box flexGrow={1} />
+              <Text color={theme.border}>{msgCount} msgs</Text>
+              <Text color={theme.textMuted}> {timeStr}</Text>
             </Box>
           )
         })}
-        
         {displaySessions.length === 0 && (
           <Text color={theme.textMuted}>
             {sessions.length === 0 ? 'No sessions yet' : 'No matching sessions'}
@@ -189,10 +173,17 @@ export default function SessionList({ width, height }: Props) {
       </Box>
       
       {/* Footer */}
-      <Box marginTop={1} borderStyle="single" borderColor={theme.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingTop={0}>
-        <Text color={theme.textMuted}>
-          enter: select · ctrl+n: new · ctrl+d: delete · esc: close
-        </Text>
+      <Box marginTop={1}>
+        <Text color={theme.border}>─</Text>
+        <Text color={theme.textMuted}> </Text>
+        <Text color={theme.accent}>enter</Text>
+        <Text color={theme.textMuted}> select </Text>
+        <Text color={theme.accent}>^n</Text>
+        <Text color={theme.textMuted}> new </Text>
+        <Text color={theme.accent}>^d</Text>
+        <Text color={theme.textMuted}> delete </Text>
+        <Text color={theme.accent}>esc</Text>
+        <Text color={theme.textMuted}> close</Text>
       </Box>
     </Box>
   )

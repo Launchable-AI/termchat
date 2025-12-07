@@ -1,142 +1,296 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Box, Text } from 'ink'
 import { useStore } from '../hooks/useStore.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
 
+// Spinner frames for streaming animation
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+// Custom border characters for left accent
+const BORDER_CHARS = {
+  vertical: '┃',
+  top: '┃',
+  bottom: '╹',
+}
+
+interface MessageBlockProps {
+  role: 'user' | 'assistant'
+  content: string
+  reasoning?: string
+  model?: string
+  isStreaming?: boolean
+  width: number
+  theme: ReturnType<typeof useStore>['theme']
+  spinnerFrame: number
+}
+
+function MessageBlock({ role, content, reasoning, model, isStreaming, width, theme, spinnerFrame }: MessageBlockProps) {
+  const isUser = role === 'user'
+  const accentColor = isUser ? theme.accent : theme.info
+  const bgColor = isUser ? theme.backgroundUser : theme.backgroundAssistant
+  
+  // Word wrap content to fit width
+  const wrapText = (text: string, maxWidth: number): string[] => {
+    const lines: string[] = []
+    const paragraphs = text.split('\n')
+    
+    for (const paragraph of paragraphs) {
+      if (paragraph.length === 0) {
+        lines.push('')
+        continue
+      }
+      
+      const words = paragraph.split(' ')
+      let currentLine = ''
+      
+      for (const word of words) {
+        if (currentLine.length + word.length + 1 <= maxWidth) {
+          currentLine += (currentLine ? ' ' : '') + word
+        } else {
+          if (currentLine) lines.push(currentLine)
+          // Handle very long words
+          if (word.length > maxWidth) {
+            let remaining = word
+            while (remaining.length > maxWidth) {
+              lines.push(remaining.slice(0, maxWidth))
+              remaining = remaining.slice(maxWidth)
+            }
+            currentLine = remaining
+          } else {
+            currentLine = word
+          }
+        }
+      }
+      if (currentLine) lines.push(currentLine)
+    }
+    
+    return lines
+  }
+  
+  // Content width (accounting for border + padding)
+  const contentWidth = width - 4
+  const contentLines = wrapText(content || (isStreaming ? '' : ''), contentWidth)
+  
+  // Reasoning section (for models that support it)
+  const reasoningLines = reasoning ? wrapText(reasoning, contentWidth - 2) : []
+  
+  // Model display name
+  const modelName = model?.split('/').pop()?.replace(/:.*$/, '') || ''
+  
+  return (
+    <Box flexDirection="column" width={width}>
+      {/* Header with role and model */}
+      <Box>
+        <Text color={accentColor}>{BORDER_CHARS.vertical}</Text>
+        <Text backgroundColor={bgColor} color={theme.text} bold>
+          {' '}{isUser ? 'You' : 'Assistant'}
+        </Text>
+        {modelName && !isUser && (
+          <Text backgroundColor={bgColor} color={theme.textMuted}>
+            {' '}{modelName}
+          </Text>
+        )}
+        {isStreaming && (
+          <Text backgroundColor={bgColor} color={theme.success}>
+            {' '}{SPINNER_FRAMES[spinnerFrame]}
+          </Text>
+        )}
+        <Text backgroundColor={bgColor}>{' '.repeat(Math.max(0, contentWidth - (isUser ? 3 : 10 + modelName.length) - (isStreaming ? 2 : 0)))}</Text>
+      </Box>
+      
+      {/* Reasoning (collapsible, dimmed) */}
+      {reasoningLines.length > 0 && (
+        <>
+          <Box>
+            <Text color={theme.border}>{BORDER_CHARS.vertical}</Text>
+            <Text backgroundColor={bgColor} color={theme.textMuted} dimColor>
+              {' '}thinking...
+            </Text>
+            <Text backgroundColor={bgColor}>{' '.repeat(Math.max(0, contentWidth - 11))}</Text>
+          </Box>
+          {reasoningLines.slice(0, 3).map((line, i) => (
+            <Box key={`r-${i}`}>
+              <Text color={theme.border}>{BORDER_CHARS.vertical}</Text>
+              <Text backgroundColor={bgColor} color={theme.textMuted} dimColor>
+                {'  '}{line}
+              </Text>
+              <Text backgroundColor={bgColor}>{' '.repeat(Math.max(0, contentWidth - line.length - 2))}</Text>
+            </Box>
+          ))}
+          {reasoningLines.length > 3 && (
+            <Box>
+              <Text color={theme.border}>{BORDER_CHARS.vertical}</Text>
+              <Text backgroundColor={bgColor} color={theme.textMuted} dimColor>
+                {'  '}...{reasoningLines.length - 3} more lines
+              </Text>
+              <Text backgroundColor={bgColor}>{' '.repeat(Math.max(0, contentWidth - 15))}</Text>
+            </Box>
+          )}
+        </>
+      )}
+      
+      {/* Content */}
+      {contentLines.map((line, i) => (
+        <Box key={i}>
+          <Text color={accentColor}>{BORDER_CHARS.vertical}</Text>
+          <Text backgroundColor={bgColor} color={theme.text}>
+            {' '}{line}
+          </Text>
+          <Text backgroundColor={bgColor}>{' '.repeat(Math.max(0, contentWidth - line.length))}</Text>
+        </Box>
+      ))}
+      
+      {/* Streaming placeholder */}
+      {isStreaming && content === '' && (
+        <Box>
+          <Text color={accentColor}>{BORDER_CHARS.vertical}</Text>
+          <Text backgroundColor={bgColor} color={theme.textMuted}>
+            {' '}{SPINNER_FRAMES[spinnerFrame]} thinking...
+          </Text>
+          <Text backgroundColor={bgColor}>{' '.repeat(Math.max(0, contentWidth - 13))}</Text>
+        </Box>
+      )}
+      
+      {/* Bottom border accent */}
+      <Box>
+        <Text color={accentColor}>{BORDER_CHARS.bottom}</Text>
+        <Text backgroundColor={bgColor}>{' '.repeat(contentWidth + 2)}</Text>
+      </Box>
+    </Box>
+  )
+}
+
 export default function Messages() {
-  const { theme, getCurrentSession, isStreaming, error, sidebarVisible } = useStore()
+  const { theme, getCurrentSession, isStreaming, error, sidebarVisible, tabs } = useStore()
   const { width, height } = useTerminalSize()
   
   const session = getCurrentSession()
   
-  // Calculate content width (account for sidebar if visible)
-  const sidebarWidth = sidebarVisible ? 31 : 0 // 30 + 1 for separator
-  const contentWidth = width - sidebarWidth
-  const contentHeight = height - 2 // header + footer
+  // Spinner animation
+  const [spinnerFrame, setSpinnerFrame] = React.useState(0)
+  React.useEffect(() => {
+    if (isStreaming) {
+      const interval = setInterval(() => {
+        setSpinnerFrame((f) => (f + 1) % SPINNER_FRAMES.length)
+      }, 80)
+      return () => clearInterval(interval)
+    }
+  }, [isStreaming])
   
-  // Helper to create a filled line
-  const fillLine = (content: string, bg: string, fg: string, bold = false) => {
-    const padded = content.padEnd(contentWidth, ' ')
-    return <Text backgroundColor={bg} color={fg} bold={bold}>{padded}</Text>
-  }
+  // Calculate dimensions
+  const sidebarWidth = sidebarVisible ? 28 : 0
+  const contentWidth = width - sidebarWidth - (sidebarVisible ? 1 : 0)
+  const headerHeight = 1
+  const footerHeight = 1
+  const tabBarHeight = tabs.length > 1 ? 1 : 0
+  const inputHeight = 3
+  const availableHeight = height - headerHeight - footerHeight - tabBarHeight - inputHeight
   
-  if (error) {
-    const lines: React.ReactNode[] = []
-    lines.push(<Box key="err1">{fillLine('', theme.background, theme.text)}</Box>)
-    lines.push(<Box key="err2">{fillLine('  Error', theme.background, theme.error, true)}</Box>)
-    lines.push(<Box key="err3">{fillLine('', theme.background, theme.text)}</Box>)
-    lines.push(<Box key="err4">{fillLine('  ' + error, theme.background, theme.text)}</Box>)
-    lines.push(<Box key="err5">{fillLine('', theme.background, theme.text)}</Box>)
-    lines.push(<Box key="err6">{fillLine("  Press 'c' to clear", theme.background, theme.textMuted)}</Box>)
-    
-    // Fill remaining
-    for (let i = lines.length; i < contentHeight; i++) {
-      lines.push(<Box key={`fill-${i}`}>{fillLine('', theme.background, theme.text)}</Box>)
+  // Build the message view
+  const renderMessages = useMemo(() => {
+    if (error) {
+      return (
+        <Box flexDirection="column" alignItems="center" justifyContent="center" height={availableHeight}>
+          <Box flexDirection="column" paddingX={2} width={Math.min(60, contentWidth - 4)}>
+            <Box marginBottom={1}>
+              <Text color={theme.error} bold>Error</Text>
+            </Box>
+            <Box marginBottom={1}>
+              <Text color={theme.text}>{error}</Text>
+            </Box>
+            <Box>
+              <Text color={theme.textMuted}>Press </Text>
+              <Text color={theme.accent}>c</Text>
+              <Text color={theme.textMuted}> to clear</Text>
+            </Box>
+          </Box>
+        </Box>
+      )
     }
     
-    return <Box flexDirection="column" flexGrow={1}>{lines}</Box>
-  }
-  
-  if (!session || session.messages.length === 0) {
-    const lines: React.ReactNode[] = []
-    const midPoint = Math.floor(contentHeight / 2) - 1
-    
-    // Fill top half
-    for (let i = 0; i < midPoint; i++) {
-      lines.push(<Box key={`top-${i}`}>{fillLine('', theme.background, theme.text)}</Box>)
+    if (!session || session.messages.length === 0) {
+      return (
+        <Box flexDirection="column" alignItems="center" justifyContent="center" height={availableHeight}>
+          <Box flexDirection="column" alignItems="center">
+            <Box marginBottom={1}>
+              <Text color={theme.textMuted}>
+                {session ? 'Start a conversation' : 'No session selected'}
+              </Text>
+            </Box>
+            <Box>
+              <Text color={theme.textMuted}>Press </Text>
+              <Text color={theme.accent}>i</Text>
+              <Text color={theme.textMuted}> to start typing, </Text>
+              <Text color={theme.accent}>?</Text>
+              <Text color={theme.textMuted}> for help</Text>
+            </Box>
+          </Box>
+        </Box>
+      )
     }
     
-    // Center message
-    const msg1 = session ? 'Start a conversation' : 'No session selected'
-    const msg2 = 'Press i to start typing, or ? for help'
-    const pad1 = Math.max(0, Math.floor((contentWidth - msg1.length) / 2))
-    const pad2 = Math.max(0, Math.floor((contentWidth - msg2.length) / 2))
+    // Render messages with proper spacing
+    const elements: React.ReactNode[] = []
     
-    lines.push(<Box key="msg1">{fillLine(' '.repeat(pad1) + msg1, theme.background, theme.text)}</Box>)
-    lines.push(<Box key="gap">{fillLine('', theme.background, theme.text)}</Box>)
-    lines.push(<Box key="msg2">{fillLine(' '.repeat(pad2) + msg2, theme.background, theme.textMuted)}</Box>)
-    
-    // Fill bottom
-    for (let i = lines.length; i < contentHeight; i++) {
-      lines.push(<Box key={`bot-${i}`}>{fillLine('', theme.background, theme.text)}</Box>)
-    }
-    
-    return <Box flexDirection="column" flexGrow={1}>{lines}</Box>
-  }
-  
-  // Render messages with filled backgrounds
-  const lines: React.ReactNode[] = []
-  
-  session.messages.forEach((message, index) => {
-    const isUser = message.role === 'user'
-    const isLast = index === session.messages.length - 1
-    const isAssistantStreaming = isStreaming && !isUser && isLast
-    const bg = isUser ? theme.backgroundPanel : theme.background
-    const borderColor = isUser ? theme.accent : theme.primary
-    
-    // Empty line before message (except first)
-    if (index > 0) {
-      lines.push(<Box key={`gap-${index}`}>{fillLine('', bg, theme.text)}</Box>)
-    }
-    
-    // Header line with colored border
-    const roleName = isUser ? 'You' : 'Assistant'
-    const modelInfo = message.model && !isUser 
-      ? `  ${message.model.split('/').pop()?.replace(/:.*$/, '')}` 
-      : ''
-    const streamingIndicator = isAssistantStreaming ? '  ●' : ''
-    
-    // Build header with colored left border
-    const headerContent = `  ${roleName}${modelInfo}${streamingIndicator}`
-    lines.push(
-      <Box key={`header-${message.id}`}>
-        <Text backgroundColor={bg} color={borderColor}>{'█'}</Text>
-        <Text backgroundColor={bg} color={theme.text} bold>{` ${roleName}`}</Text>
-        <Text backgroundColor={bg} color={theme.textMuted}>{modelInfo}</Text>
-        {isAssistantStreaming && <Text backgroundColor={bg} color={theme.success}>{streamingIndicator}</Text>}
-        <Text backgroundColor={bg}>{' '.repeat(Math.max(0, contentWidth - headerContent.length - 1))}</Text>
-      </Box>
-    )
-    
-    // Content lines
-    const content = message.content || (isAssistantStreaming ? '...' : '')
-    const contentLines = content.split('\n')
-    
-    contentLines.forEach((line, lineIdx) => {
-      // Word wrap long lines
-      const maxLineWidth = contentWidth - 4 // account for left padding
-      if (line.length <= maxLineWidth) {
-        lines.push(
-          <Box key={`content-${message.id}-${lineIdx}`}>
-            {fillLine('    ' + line, bg, theme.text)}
+    session.messages.forEach((message, index) => {
+      const isLast = index === session.messages.length - 1
+      const isAssistantStreaming = isStreaming && message.role === 'assistant' && isLast
+      
+      // Add spacing between messages
+      if (index > 0) {
+        elements.push(
+          <Box key={`spacer-${index}`} height={1}>
+            <Text> </Text>
           </Box>
         )
-      } else {
-        // Simple word wrap
-        let remaining = line
-        let subIdx = 0
-        while (remaining.length > 0) {
-          const chunk = remaining.slice(0, maxLineWidth)
-          remaining = remaining.slice(maxLineWidth)
-          lines.push(
-            <Box key={`content-${message.id}-${lineIdx}-${subIdx}`}>
-              {fillLine('    ' + chunk, bg, theme.text)}
-            </Box>
-          )
-          subIdx++
-        }
       }
+      
+      elements.push(
+        <MessageBlock
+          key={message.id}
+          role={message.role as 'user' | 'assistant'}
+          content={message.content}
+          reasoning={message.reasoning}
+          model={message.model}
+          isStreaming={isAssistantStreaming}
+          width={contentWidth}
+          theme={theme}
+          spinnerFrame={spinnerFrame}
+        />
+      )
     })
-  })
+    
+    return elements
+  }, [session, isStreaming, error, contentWidth, availableHeight, theme, spinnerFrame])
   
-  // Fill remaining space with background
-  for (let i = lines.length; i < contentHeight; i++) {
-    lines.push(<Box key={`fill-${i}`}>{fillLine('', theme.background, theme.text)}</Box>)
-  }
+  // Fill background
+  const bgFill = (
+    <Box flexDirection="column" width={contentWidth}>
+      {Array.from({ length: availableHeight }).map((_, i) => (
+        <Box key={i}>
+          <Text backgroundColor={theme.background}>{' '.repeat(contentWidth)}</Text>
+        </Box>
+      ))}
+    </Box>
+  )
   
   return (
-    <Box flexDirection="column" flexGrow={1} overflowY="hidden">
-      {lines.slice(0, contentHeight)}
+    <Box
+      flexDirection="column"
+      flexGrow={1}
+      width={contentWidth}
+      height={availableHeight}
+      overflowY="hidden"
+    >
+      {/* Background fill layer */}
+      <Box position="absolute" width={contentWidth} height={availableHeight}>
+        {bgFill}
+      </Box>
+      
+      {/* Content layer */}
+      <Box flexDirection="column" paddingX={1} paddingY={1}>
+        {renderMessages}
+      </Box>
     </Box>
   )
 }

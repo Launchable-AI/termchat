@@ -3,7 +3,7 @@ import { Box, Text, useInput } from 'ink'
 import TextInput from 'ink-text-input'
 import fuzzysort from 'fuzzysort'
 import { useStore } from '../../hooks/useStore.js'
-import { isFreeTierModel, isReasoningModel, formatModelPrice, Model } from '../../api/openrouter.js'
+import { isFreeTierModel, isReasoningModel, Model } from '../../api/openrouter.js'
 
 interface Props {
   width: number
@@ -37,18 +37,12 @@ export default function ModelSelector({ width, height }: Props) {
     }
   }, [])
   
-  // Filter and sort models - always search full API list
+  // Filter and sort models
   const displayModels = useMemo(() => {
-    // Use allModels for search, or models (favorites) if showFavoritesOnly
     let sourceModels = showFavoritesOnly ? models : allModels
-    
-    // Fallback to favorites if allModels not loaded yet
-    if (sourceModels.length === 0) {
-      sourceModels = models
-    }
+    if (sourceModels.length === 0) sourceModels = models
     
     if (!query.trim()) {
-      // Sort: favorites first, then by name
       return sourceModels.slice().sort((a, b) => {
         const aFav = settings.favoriteModels.includes(a.id)
         const bFav = settings.favoriteModels.includes(b.id)
@@ -58,7 +52,6 @@ export default function ModelSelector({ width, height }: Props) {
       })
     }
     
-    // Fuzzy search across ALL models
     const results = fuzzysort.go(query, sourceModels, {
       keys: ['name', 'id', 'description'],
       limit: 100,
@@ -68,13 +61,11 @@ export default function ModelSelector({ width, height }: Props) {
     return results.map((r) => r.obj)
   }, [query, models, allModels, showFavoritesOnly, settings.favoriteModels])
   
-  // Keep selection in bounds
-  const clampedIndex = Math.min(selectedIndex, displayModels.length - 1)
-  const maxVisible = height - 6 // Account for header, search, footer
+  const clampedIndex = Math.min(selectedIndex, Math.max(0, displayModels.length - 1))
+  const maxVisible = height - 5
   const scrollOffset = Math.max(0, clampedIndex - maxVisible + 3)
   
   useInput((input, key) => {
-    // Navigation
     if (key.downArrow || (key.ctrl && input === 'n') || input === 'j') {
       setSelectedIndex((i) => Math.min(i + 1, displayModels.length - 1))
       return
@@ -83,8 +74,6 @@ export default function ModelSelector({ width, height }: Props) {
       setSelectedIndex((i) => Math.max(i - 1, 0))
       return
     }
-    
-    // Page up/down
     if (key.pageUp) {
       setSelectedIndex((i) => Math.max(i - maxVisible, 0))
       return
@@ -93,8 +82,6 @@ export default function ModelSelector({ width, height }: Props) {
       setSelectedIndex((i) => Math.min(i + maxVisible, displayModels.length - 1))
       return
     }
-    
-    // Select model
     if (key.return) {
       const model = displayModels[clampedIndex]
       if (model) {
@@ -103,17 +90,11 @@ export default function ModelSelector({ width, height }: Props) {
       }
       return
     }
-    
-    // Toggle favorite
     if (key.tab) {
       const model = displayModels[clampedIndex]
-      if (model) {
-        toggleFavorite(model.id)
-      }
+      if (model) toggleFavorite(model.id)
       return
     }
-    
-    // Toggle favorites only
     if (key.ctrl && input === 'a') {
       setShowFavoritesOnly((s) => !s)
       setSelectedIndex(0)
@@ -122,13 +103,11 @@ export default function ModelSelector({ width, height }: Props) {
   })
   
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <Box flexDirection="column" width={width} height={height}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text color={theme.primary} bold>
-          Select Model
-        </Text>
-        <Text color={theme.textMuted}> · </Text>
+        <Text color={theme.accent} bold>Select Model</Text>
+        <Text color={theme.border}> │ </Text>
         <Text color={theme.textMuted}>
           {isLoadingModels ? 'loading...' : showFavoritesOnly ? `${models.length} favorites` : `${allModels.length} models`}
         </Text>
@@ -136,7 +115,8 @@ export default function ModelSelector({ width, height }: Props) {
       
       {/* Search */}
       <Box marginBottom={1}>
-        <Text color={theme.textMuted}>› </Text>
+        <Text color={theme.accent}>❯</Text>
+        <Text> </Text>
         <TextInput
           value={query}
           onChange={setQuery}
@@ -155,60 +135,50 @@ export default function ModelSelector({ width, height }: Props) {
           const isFree = isFreeTierModel(model.id)
           const isReasoning = isReasoningModel(model.id)
           
-          // Truncate name to fit
-          const maxNameLen = width - 20
+          const maxNameLen = width - 18
           const displayName = model.name.length > maxNameLen
-            ? model.name.slice(0, maxNameLen - 3) + '...'
+            ? model.name.slice(0, maxNameLen - 1) + '…'
             : model.name
           
           return (
             <Box key={model.id}>
-              <Text color={isSelected ? theme.accent : theme.text}>
-                {isSelected ? '› ' : '  '}
+              <Text color={isSelected ? theme.accent : theme.textMuted}>
+                {isSelected ? '▸' : ' '}
               </Text>
-              <Text color={isFavorite ? theme.warning : theme.textMuted}>
-                {isFavorite ? '★ ' : '  '}
+              <Text color={isFavorite ? theme.warning : theme.border}>
+                {isFavorite ? '★' : ' '}
               </Text>
+              <Text> </Text>
               <Text
-                color={isSelected ? theme.accent : isCurrent ? theme.success : theme.text}
-                bold={isSelected || isCurrent}
+                color={isSelected ? theme.text : isCurrent ? theme.success : theme.textMuted}
+                bold={isSelected}
               >
                 {displayName}
               </Text>
-              
               <Box flexGrow={1} />
-              
-              {isFree && (
-                <Text color={theme.success}>
-                  {' free'}
-                </Text>
-              )}
-              {isReasoning && (
-                <Text color={theme.info}>
-                  {' 🧠'}
-                </Text>
-              )}
-              {isCurrent && (
-                <Text color={theme.success}>
-                  {' ✓'}
-                </Text>
-              )}
+              {isFree && <Text color={theme.success}> FREE</Text>}
+              {isReasoning && <Text color={theme.info}> COT</Text>}
+              {isCurrent && <Text color={theme.success}> ●</Text>}
             </Box>
           )
         })}
-        
         {displayModels.length === 0 && (
-          <Text color={theme.textMuted}>
-            No models found
-          </Text>
+          <Text color={theme.textMuted}>No models found</Text>
         )}
       </Box>
       
       {/* Footer */}
-      <Box marginTop={1} borderStyle="single" borderColor={theme.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingTop={0}>
-        <Text color={theme.textMuted}>
-          enter: select · tab: ★ favorite · ctrl+a: {showFavoritesOnly ? 'all' : 'favorites'} · esc: close
-        </Text>
+      <Box marginTop={1}>
+        <Text color={theme.border}>─</Text>
+        <Text color={theme.textMuted}> </Text>
+        <Text color={theme.accent}>enter</Text>
+        <Text color={theme.textMuted}> select </Text>
+        <Text color={theme.accent}>tab</Text>
+        <Text color={theme.textMuted}> ★ </Text>
+        <Text color={theme.accent}>^a</Text>
+        <Text color={theme.textMuted}> {showFavoritesOnly ? 'all' : 'favs'} </Text>
+        <Text color={theme.accent}>esc</Text>
+        <Text color={theme.textMuted}> close</Text>
       </Box>
     </Box>
   )

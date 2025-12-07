@@ -9,64 +9,73 @@ interface Props {
 
 interface KeybindSection {
   title: string
-  bindings: { key: string; description: string }[]
+  bindings: { key: string; desc: string }[]
 }
 
 const KEYBINDS: KeybindSection[] = [
   {
     title: 'Mode',
     bindings: [
-      { key: 'i, Enter', description: 'Enter insert mode (start typing)' },
-      { key: 'Esc', description: 'Exit insert mode' },
+      { key: 'i / Enter', desc: 'Insert mode' },
+      { key: 'Esc', desc: 'Normal mode' },
     ],
   },
   {
     title: 'Navigation',
     bindings: [
-      { key: 'j / ↓', description: 'Move down' },
-      { key: 'k / ↑', description: 'Move up' },
-      { key: 'Ctrl+d', description: 'Page down' },
-      { key: 'Ctrl+u', description: 'Page up' },
+      { key: 'j / ↓', desc: 'Down' },
+      { key: 'k / ↑', desc: 'Up' },
+      { key: 'PgUp/Dn', desc: 'Page scroll' },
     ],
   },
   {
-    title: 'Sessions & Tabs',
+    title: 'Sessions',
     bindings: [
-      { key: 'n', description: 'New session' },
-      { key: 's', description: 'Session list' },
-      { key: 'b', description: 'Toggle sidebar' },
-      { key: '1-9', description: 'Switch to tab 1-9' },
-      { key: '[ / ]', description: 'Prev/next tab' },
-      { key: 'Ctrl+w', description: 'Close current tab' },
+      { key: 'n', desc: 'New session' },
+      { key: 's', desc: 'Session list' },
+      { key: 'b', desc: 'Toggle sidebar' },
     ],
   },
   {
-    title: 'Models & Themes',
+    title: 'Tabs',
     bindings: [
-      { key: 'm', description: 'Model selector (fuzzy search)' },
-      { key: 't', description: 'Cycle theme' },
-      { key: 'T (shift)', description: 'Theme selector' },
+      { key: '1-9', desc: 'Switch tab' },
+      { key: '[ / ]', desc: 'Prev/next tab' },
+      { key: 'Ctrl+w', desc: 'Close tab' },
+    ],
+  },
+  {
+    title: 'Models',
+    bindings: [
+      { key: 'm', desc: 'Model selector' },
+      { key: 'Tab', desc: '★ Toggle favorite' },
+    ],
+  },
+  {
+    title: 'Theme',
+    bindings: [
+      { key: 't', desc: 'Cycle theme' },
+      { key: 'T', desc: 'Theme selector' },
     ],
   },
   {
     title: 'General',
     bindings: [
-      { key: 'Ctrl+p / :', description: 'Command palette' },
-      { key: '?', description: 'This help dialog' },
-      { key: 'c', description: 'Clear error' },
-      { key: 'q', description: 'Quit' },
-      { key: 'Ctrl+c', description: 'Cancel streaming / Quit' },
+      { key: 'Ctrl+p / :', desc: 'Command palette' },
+      { key: '?', desc: 'This help' },
+      { key: 'c', desc: 'Clear error' },
+      { key: 'q / Ctrl+c', desc: 'Quit' },
     ],
   },
   {
-    title: 'Slash Commands',
+    title: 'Commands',
     bindings: [
-      { key: '/help', description: 'Show help' },
-      { key: '/models', description: 'Model selector' },
-      { key: '/sessions', description: 'Session list' },
-      { key: '/theme', description: 'Theme selector' },
-      { key: '/new', description: 'New session' },
-      { key: '/quit', description: 'Quit' },
+      { key: '/help', desc: 'Show help' },
+      { key: '/models', desc: 'Model selector' },
+      { key: '/sessions', desc: 'Session list' },
+      { key: '/theme', desc: 'Theme selector' },
+      { key: '/new', desc: 'New session' },
+      { key: '/quit', desc: 'Quit' },
     ],
   },
 ]
@@ -74,63 +83,51 @@ const KEYBINDS: KeybindSection[] = [
 export default function HelpDialog({ width, height }: Props) {
   const { theme } = useStore()
   
+  // Split into two columns
+  const leftSections = KEYBINDS.slice(0, 4)
+  const rightSections = KEYBINDS.slice(4)
+  const columnWidth = Math.floor((width - 4) / 2)
+  
+  const renderSection = (section: KeybindSection) => (
+    <Box key={section.title} flexDirection="column" marginBottom={1}>
+      <Text color={theme.accent} bold>{section.title}</Text>
+      {section.bindings.map((bind) => (
+        <Box key={bind.key}>
+          <Box width={13}>
+            <Text color={theme.success}>{bind.key}</Text>
+          </Box>
+          <Text color={theme.textMuted}>{bind.desc}</Text>
+        </Box>
+      ))}
+    </Box>
+  )
+  
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <Box flexDirection="column" width={width} height={height}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text color={theme.primary} bold>
-          TermChat Help
-        </Text>
-        <Text color={theme.textMuted}> · </Text>
-        <Text color={theme.textMuted}>
-          Vim-inspired keybindings
-        </Text>
+        <Text color={theme.accent} bold>Keybindings</Text>
+        <Text color={theme.border}> │ </Text>
+        <Text color={theme.textMuted}>Vim-style navigation</Text>
       </Box>
       
-      {/* Content - two columns */}
-      <Box flexDirection="row" height={height - 4}>
-        <Box flexDirection="column" width={Math.floor(width / 2) - 2}>
-          {KEYBINDS.slice(0, 3).map((section) => (
-            <Box key={section.title} flexDirection="column" marginBottom={1}>
-              <Text color={theme.accent} bold>
-                {section.title}
-              </Text>
-              {section.bindings.map((bind) => (
-                <Box key={bind.key}>
-                  <Box width={14}>
-                    <Text color={theme.success}>{bind.key}</Text>
-                  </Box>
-                  <Text color={theme.textMuted}>{bind.description}</Text>
-                </Box>
-              ))}
-            </Box>
-          ))}
+      {/* Two-column layout */}
+      <Box flexDirection="row" flexGrow={1}>
+        <Box flexDirection="column" width={columnWidth}>
+          {leftSections.map(renderSection)}
         </Box>
-        
-        <Box flexDirection="column" width={Math.floor(width / 2) - 2}>
-          {KEYBINDS.slice(3).map((section) => (
-            <Box key={section.title} flexDirection="column" marginBottom={1}>
-              <Text color={theme.accent} bold>
-                {section.title}
-              </Text>
-              {section.bindings.map((bind) => (
-                <Box key={bind.key}>
-                  <Box width={14}>
-                    <Text color={theme.success}>{bind.key}</Text>
-                  </Box>
-                  <Text color={theme.textMuted}>{bind.description}</Text>
-                </Box>
-              ))}
-            </Box>
-          ))}
+        <Box width={2} />
+        <Box flexDirection="column" width={columnWidth}>
+          {rightSections.map(renderSection)}
         </Box>
       </Box>
       
       {/* Footer */}
-      <Box marginTop={1} borderStyle="single" borderColor={theme.border} borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingTop={0}>
-        <Text color={theme.textMuted}>
-          Press Esc to close
-        </Text>
+      <Box marginTop={1}>
+        <Text color={theme.border}>─</Text>
+        <Text color={theme.textMuted}> </Text>
+        <Text color={theme.accent}>esc</Text>
+        <Text color={theme.textMuted}> close</Text>
       </Box>
     </Box>
   )
