@@ -1,10 +1,14 @@
 import 'dotenv/config'
 import { create } from 'zustand'
+import { shallow } from 'zustand/shallow'
 import storage, { Session, ChatMessage, Settings } from '../storage/index.js'
 import { OpenRouterClient, Model, FAVORITE_MODELS } from '../api/openrouter.js'
 import { getTheme, ResolvedTheme, getAvailableThemes } from '../themes/index.js'
 
-export type AppMode = 'normal' | 'insert'
+// Re-export shallow for convenience
+export { shallow }
+
+export type AppMode = 'normal' | 'insert' | 'scroll'
 export type DialogType =
   | 'none'
   | 'models'
@@ -20,11 +24,25 @@ interface Tab {
   title: string
 }
 
+interface CodeBlock {
+  id: string
+  messageId: string
+  language: string
+  code: string
+  startLine: number
+  endLine: number
+}
+
 interface AppState {
   // App state
   mode: AppMode
   dialog: DialogType
   sidebarVisible: boolean
+  
+  // Scroll state
+  scrollOffset: number
+  selectedCodeBlockIndex: number
+  codeBlocks: CodeBlock[]
   
   // Tabs
   tabs: Tab[]
@@ -58,10 +76,24 @@ interface AppState {
   // Input
   inputValue: string
   
+  // Notification (for copy feedback)
+  notification: string | null
+  
   // Actions
   setMode: (mode: AppMode) => void
   setDialog: (dialog: DialogType) => void
   toggleSidebar: () => void
+  
+  // Scroll actions
+  setScrollOffset: (offset: number) => void
+  scrollUp: (lines?: number) => void
+  scrollDown: (lines?: number) => void
+  scrollToTop: () => void
+  scrollToBottom: () => void
+  setCodeBlocks: (blocks: CodeBlock[]) => void
+  selectNextCodeBlock: () => void
+  selectPrevCodeBlock: () => void
+  copySelectedCodeBlock: () => Promise<void>
   
   setTheme: (name: string) => void
   cycleTheme: () => void
@@ -91,6 +123,7 @@ interface AppState {
   testConnection: () => Promise<boolean>
   
   setError: (error: string | null) => void
+  setNotification: (msg: string | null) => void
   
   setInputValue: (value: string) => void
   
@@ -105,6 +138,11 @@ export const useStore = create<AppState>((set, get) => ({
   mode: 'normal',
   dialog: 'none',
   sidebarVisible: true,
+  
+  // Scroll state
+  scrollOffset: 0,
+  selectedCodeBlockIndex: -1,
+  codeBlocks: [],
   
   // Tabs
   tabs: [],
@@ -128,6 +166,7 @@ export const useStore = create<AppState>((set, get) => ({
   isConnected: false,
   
   error: null,
+  notification: null,
   
   inputValue: '',
   
@@ -137,6 +176,51 @@ export const useStore = create<AppState>((set, get) => ({
   setDialog: (dialog) => set({ dialog }),
   
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
+  
+  // Scroll actions
+  setScrollOffset: (offset) => set({ scrollOffset: Math.max(0, offset) }),
+  
+  scrollUp: (lines = 3) => set((s) => ({ scrollOffset: Math.max(0, s.scrollOffset - lines) })),
+  
+  scrollDown: (lines = 3) => set((s) => ({ scrollOffset: s.scrollOffset + lines })),
+  
+  scrollToTop: () => set({ scrollOffset: 0 }),
+  
+  scrollToBottom: () => set({ scrollOffset: 0 }), // Will be adjusted by Messages component
+  
+  setCodeBlocks: (blocks) => set({ codeBlocks: blocks }),
+  
+  selectNextCodeBlock: () => set((s) => {
+    if (s.codeBlocks.length === 0) return s
+    const next = s.selectedCodeBlockIndex + 1
+    return { selectedCodeBlockIndex: next >= s.codeBlocks.length ? 0 : next }
+  }),
+  
+  selectPrevCodeBlock: () => set((s) => {
+    if (s.codeBlocks.length === 0) return s
+    const prev = s.selectedCodeBlockIndex - 1
+    return { selectedCodeBlockIndex: prev < 0 ? s.codeBlocks.length - 1 : prev }
+  }),
+  
+  copySelectedCodeBlock: async () => {
+    const { codeBlocks, selectedCodeBlockIndex, setNotification } = get()
+    if (selectedCodeBlockIndex < 0 || selectedCodeBlockIndex >= codeBlocks.length) {
+      setNotification('No code block selected')
+      return
+    }
+    
+    const block = codeBlocks[selectedCodeBlockIndex]
+    try {
+      const clipboard = await import('clipboardy')
+      await clipboard.default.write(block.code)
+      setNotification(`Copied ${block.language || 'code'} block to clipboard`)
+    } catch (err) {
+      setNotification('Failed to copy to clipboard')
+    }
+    
+    // Clear notification after 2 seconds
+    setTimeout(() => get().setNotification(null), 2000)
+  },
   
   setTheme: (name) => {
     storage.setTheme(name)
@@ -169,6 +253,8 @@ export const useStore = create<AppState>((set, get) => ({
     get().loadSessions()
     // Open in a new tab
     get().openTab(session.id)
+    // Reset scroll
+    set({ scrollOffset: 0, selectedCodeBlockIndex: -1, codeBlocks: [] })
     return session
   },
   
@@ -176,7 +262,7 @@ export const useStore = create<AppState>((set, get) => ({
     const session = storage.getSession(id)
     if (session) {
       get().openTab(id)
-      set({ currentModel: session.model })
+      set({ currentModel: session.model, scrollOffset: 0, selectedCodeBlockIndex: -1 })
     }
   },
   
@@ -244,6 +330,8 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       activeTabIndex: index,
       currentSessionId: tabs[index].sessionId,
+      scrollOffset: 0,
+      selectedCodeBlockIndex: -1,
     })
   },
   
@@ -328,6 +416,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   setError: (error) => set({ error }),
+  setNotification: (notification) => set({ notification }),
   
   setInputValue: (value) => set({ inputValue: value }),
   
@@ -367,7 +456,7 @@ export const useStore = create<AppState>((set, get) => ({
     
     // Start streaming
     const abortController = new AbortController()
-    set({ isStreaming: true, streamAbortController: abortController })
+    set({ isStreaming: true, streamAbortController: abortController, scrollOffset: 0 })
     
     let fullContent = ''
     let fullReasoning = ''

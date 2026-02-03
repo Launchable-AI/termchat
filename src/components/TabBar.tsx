@@ -4,7 +4,23 @@ import { useStore } from '../hooks/useStore.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
 
 export default function TabBar() {
-  const { theme, tabs, activeTabIndex, sidebarVisible } = useStore()
+  // Use selective subscriptions to avoid unnecessary re-renders
+  const theme = useStore(s => s.theme)
+  const sidebarVisible = useStore(s => s.sidebarVisible)
+  const activeTabIndex = useStore(s => s.activeTabIndex)
+  
+  // Get tabs with stable comparison
+  const tabs = useStore(
+    s => s.tabs.map(t => ({ sessionId: t.sessionId, title: t.title })),
+    (a, b) => {
+      if (a.length !== b.length) return false
+      for (let i = 0; i < a.length; i++) {
+        if (a[i].sessionId !== b[i].sessionId || a[i].title !== b[i].title) return false
+      }
+      return true
+    }
+  )
+  
   const { width } = useTerminalSize()
   
   if (tabs.length <= 1) {

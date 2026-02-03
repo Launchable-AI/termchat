@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react'
-import { Box, Text, useApp, useInput } from 'ink'
+import React, { useEffect, useRef } from 'react'
+import { Box, Text, useApp, useInput, useStdin } from 'ink'
 import { useStore } from '../hooks/useStore.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
 import Header from './Header.js'
@@ -15,169 +15,200 @@ const SIDEBAR_WIDTH = 27
 export default function App() {
   const { width, height } = useTerminalSize()
   const { exit } = useApp()
+  const { stdin } = useStdin()
   
-  const {
-    mode,
-    dialog,
-    sidebarVisible,
-    theme,
-    isStreaming,
-    tabs,
-    activeTabIndex,
-    setMode,
-    setDialog,
-    loadSessions,
-    createSession,
-    cancelStreaming,
-    cycleTheme,
-    toggleSidebar,
-    testConnection,
-    loadModels,
-    client,
-    error,
-    setError,
-    nextTab,
-    prevTab,
-    closeTab,
-    openTab,
-  } = useStore()
+  // Use selective subscriptions
+  const mode = useStore(s => s.mode)
+  const dialog = useStore(s => s.dialog)
+  const sidebarVisible = useStore(s => s.sidebarVisible)
+  const theme = useStore(s => s.theme)
+  const isStreaming = useStore(s => s.isStreaming)
+  const tabsLength = useStore(s => s.tabs.length)
+  const activeTabIndex = useStore(s => s.activeTabIndex)
+  const error = useStore(s => s.error)
+  const client = useStore(s => s.client)
   
   // Initialize on mount
   useEffect(() => {
-    loadSessions()
+    const store = useStore.getState()
+    store.loadSessions()
     
-    // Test connection and load models if API key exists
     if (client.hasApiKey()) {
-      testConnection().then((connected) => {
+      store.testConnection().then((connected) => {
         if (connected) {
-          loadModels()
+          store.loadModels()
         }
       })
     } else {
-      // Show API key dialog
-      setDialog('apikey')
+      store.setDialog('apikey')
     }
     
-    // Open first session as a tab if there are sessions but no tabs
-    const sessions = useStore.getState().sessions
+    const sessions = store.sessions
+    const tabs = store.tabs
     if (sessions.length > 0 && tabs.length === 0) {
-      openTab(sessions[0].id)
+      store.openTab(sessions[0].id)
     }
   }, [])
   
+  // Handle mouse scroll events - use ref to avoid re-subscribing
+  const mouseHandlerRef = useRef<((data: Buffer) => void) | null>(null)
+  
+  useEffect(() => {
+    if (!stdin) return
+    
+    // Enable mouse reporting only once
+    process.stdout.write('\x1b[?1000h')
+    process.stdout.write('\x1b[?1002h')
+    process.stdout.write('\x1b[?1006h')
+    
+    mouseHandlerRef.current = (data: Buffer) => {
+      const str = data.toString()
+      const sgrMatch = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/)
+      if (sgrMatch) {
+        const button = parseInt(sgrMatch[1], 10)
+        if (button === 64) {
+          useStore.getState().scrollUp(3)
+        } else if (button === 65) {
+          useStore.getState().scrollDown(3)
+        }
+      }
+    }
+    
+    stdin.on('data', mouseHandlerRef.current)
+    
+    return () => {
+      if (mouseHandlerRef.current) {
+        stdin.off('data', mouseHandlerRef.current)
+      }
+      process.stdout.write('\x1b[?1000l')
+      process.stdout.write('\x1b[?1002l')
+      process.stdout.write('\x1b[?1006l')
+    }
+  }, [stdin])
+  
   // Global keybindings
   useInput((input, key) => {
+    const store = useStore.getState()
+    
     // Always allow Ctrl+C to quit or cancel streaming
     if (key.ctrl && input === 'c') {
-      if (isStreaming) {
-        cancelStreaming()
+      if (store.isStreaming) {
+        store.cancelStreaming()
       } else {
         exit()
       }
       return
     }
     
-    // Skip if dialog is open (dialog handles its own keys)
-    if (dialog !== 'none') {
+    // Skip if dialog is open
+    if (store.dialog !== 'none') {
       if (key.escape) {
-        setDialog('none')
+        store.setDialog('none')
       }
       return
     }
     
+    // Scroll mode is handled by Messages component
+    if (store.mode === 'scroll') {
+      return
+    }
+    
     // Insert mode - only Escape exits
-    if (mode === 'insert') {
+    if (store.mode === 'insert') {
       if (key.escape) {
-        setMode('normal')
+        store.setMode('normal')
       }
       return
     }
     
     // Normal mode keybindings
-    if (mode === 'normal') {
-      // Enter insert mode
+    if (store.mode === 'normal') {
       if (input === 'i' || key.return) {
-        setMode('insert')
+        store.setMode('insert')
         return
       }
       
-      // Quit
+      if (input === 'v' || input === '/' || key.upArrow || key.downArrow) {
+        store.setMode('scroll')
+        return
+      }
+      
+      if (input === 'j' || input === 'k') {
+        store.setMode('scroll')
+        if (input === 'k') store.scrollUp(1)
+        if (input === 'j') store.scrollDown(1)
+        return
+      }
+      
       if (input === 'q') {
         exit()
         return
       }
       
-      // Command palette (Ctrl+P or :)
       if ((key.ctrl && input === 'p') || input === ':') {
-        setDialog('command')
+        store.setDialog('command')
         return
       }
       
       if (input === 'm') {
-        setDialog('models')
+        store.setDialog('models')
         return
       }
       
       if (input === 's') {
-        setDialog('sessions')
+        store.setDialog('sessions')
         return
       }
       
       if (input === 't') {
-        cycleTheme()
+        store.cycleTheme()
         return
       }
       
       if (input === 'T') {
-        setDialog('themes')
+        store.setDialog('themes')
         return
       }
       
       if (input === '?') {
-        setDialog('help')
+        store.setDialog('help')
         return
       }
       
-      // Toggle sidebar
       if (input === 'b') {
-        toggleSidebar()
+        store.toggleSidebar()
         return
       }
       
-      // New session
       if (input === 'n') {
-        createSession()
+        store.createSession()
         return
       }
       
-      // Clear error
-      if (input === 'c' && error) {
-        setError(null)
+      if (input === 'c' && store.error) {
+        store.setError(null)
         return
       }
       
-      // Tab navigation with number keys 1-9
       if (input >= '1' && input <= '9') {
         const tabIndex = parseInt(input, 10) - 1
-        if (tabIndex < tabs.length) {
-          useStore.getState().switchTab(tabIndex)
+        if (tabIndex < store.tabs.length) {
+          store.switchTab(tabIndex)
         }
         return
       }
       
-      // Close current tab with Ctrl+W
       if (key.ctrl && input === 'w') {
-        closeTab(activeTabIndex)
+        store.closeTab(store.activeTabIndex)
         return
       }
       
-      // Next/prev tab with [ and ]
       if (input === ']') {
-        nextTab()
+        store.nextTab()
         return
       }
       if (input === '[') {
-        prevTab()
+        store.prevTab()
         return
       }
     }
@@ -186,7 +217,7 @@ export default function App() {
   // Calculate layout dimensions
   const headerHeight = 1
   const footerHeight = 1
-  const tabBarHeight = tabs.length > 1 ? 1 : 0
+  const tabBarHeight = tabsLength > 1 ? 1 : 0
   const contentHeight = height - headerHeight - footerHeight - tabBarHeight
   
   return (
@@ -195,19 +226,14 @@ export default function App() {
       width={width}
       height={height}
     >
-      {/* Header */}
       <Header />
       
-      {/* Tab bar (if multiple tabs) */}
-      {tabs.length > 1 && <TabBar />}
+      {tabsLength > 1 && <TabBar />}
       
-      {/* Main content area */}
       <Box flexGrow={1} flexDirection="row" height={contentHeight}>
-        {/* Sidebar */}
         {sidebarVisible && (
           <>
             <Sidebar />
-            {/* Vertical separator */}
             <Box flexDirection="column" width={1}>
               {Array.from({ length: contentHeight }).map((_, i) => (
                 <Text key={i} color={theme.border}>│</Text>
@@ -216,17 +242,14 @@ export default function App() {
           </>
         )}
         
-        {/* Main content (Messages + Input) */}
         <Box flexDirection="column" flexGrow={1}>
           <Messages />
           <Input />
         </Box>
       </Box>
       
-      {/* Footer */}
       <Footer />
       
-      {/* Dialog overlay */}
       {dialog !== 'none' && <Dialog />}
     </Box>
   )

@@ -12,18 +12,14 @@ const PROMPT_CHARS = {
 }
 
 export default function Input() {
-  const {
-    theme,
-    mode,
-    inputValue,
-    setInputValue,
-    setMode,
-    sendMessage,
-    isStreaming,
-    dialog,
-    setDialog,
-    sidebarVisible,
-  } = useStore()
+  // Use selective subscriptions
+  const theme = useStore(s => s.theme)
+  const mode = useStore(s => s.mode)
+  const inputValue = useStore(s => s.inputValue)
+  const isStreaming = useStore(s => s.isStreaming)
+  const dialog = useStore(s => s.dialog)
+  const sidebarVisible = useStore(s => s.sidebarVisible)
+  
   const { width } = useTerminalSize()
   
   const isActive = mode === 'insert' && dialog === 'none'
@@ -37,55 +33,57 @@ export default function Input() {
     const trimmed = value.trim()
     if (!trimmed || isStreaming) return
     
+    const store = useStore.getState()
+    
     // Check for slash commands
     if (trimmed.startsWith('/')) {
       const cmd = trimmed.slice(1).toLowerCase().split(' ')[0]
       switch (cmd) {
         case 'help':
         case 'h':
-          setDialog('help')
-          setInputValue('')
+          store.setDialog('help')
+          store.setInputValue('')
           return
         case 'models':
         case 'm':
-          setDialog('models')
-          setInputValue('')
+          store.setDialog('models')
+          store.setInputValue('')
           return
         case 'sessions':
         case 's':
-          setDialog('sessions')
-          setInputValue('')
+          store.setDialog('sessions')
+          store.setInputValue('')
           return
         case 'theme':
         case 't':
-          setDialog('themes')
-          setInputValue('')
+          store.setDialog('themes')
+          store.setInputValue('')
           return
         case 'new':
         case 'n':
-          useStore.getState().createSession()
-          setInputValue('')
+          store.createSession()
+          store.setInputValue('')
           return
         case 'clear':
         case 'c':
-          const session = useStore.getState().getCurrentSession()
-          if (session) {
-            useStore.getState().updateSessionTitle(session.id, 'New Chat')
+          const sessionId = store.currentSessionId
+          if (sessionId) {
+            store.updateSessionTitle(sessionId, 'New Chat')
           }
-          setInputValue('')
+          store.setInputValue('')
           return
         case 'quit':
         case 'q':
           process.exit(0)
         default:
-          useStore.getState().setError(`Unknown command: /${cmd}. Type /help for available commands.`)
-          setInputValue('')
+          store.setError(`Unknown command: /${cmd}. Type /help for available commands.`)
+          store.setInputValue('')
           return
       }
     }
     
-    setInputValue('')
-    await sendMessage(trimmed)
+    store.setInputValue('')
+    await store.sendMessage(trimmed)
   }
   
   // Handle special keys in insert mode
@@ -99,7 +97,7 @@ export default function Input() {
       }
       
       if (key.escape) {
-        setMode('normal')
+        useStore.getState().setMode('normal')
         return
       }
     },
@@ -127,7 +125,7 @@ export default function Input() {
           <Box flexGrow={1}>
             <TextInput
               value={inputValue}
-              onChange={setInputValue}
+              onChange={(v) => useStore.getState().setInputValue(v)}
               placeholder={promptText}
               focus={true}
             />

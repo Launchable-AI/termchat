@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Box, Text } from 'ink'
-import { useStore } from '../hooks/useStore.js'
+import { useStore, shallow } from '../hooks/useStore.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
 
 const SIDEBAR_WIDTH = 27
@@ -22,25 +22,39 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 export default function Sidebar() {
-  const { theme, sessions, currentSessionId, tabs } = useStore()
+  // Use selective subscriptions to avoid unnecessary re-renders
+  const theme = useStore(s => s.theme)
+  const currentSessionId = useStore(s => s.currentSessionId)
+  const tabsLength = useStore(s => s.tabs.length)
+  
+  // Extract only the data needed for display to minimize re-renders
+  const sessionsList = useStore(
+    s => s.sessions.map(sess => ({
+      id: sess.id,
+      title: sess.title,
+      updatedAt: sess.updatedAt,
+    })),
+    (a, b) => {
+      if (a.length !== b.length) return false
+      for (let i = 0; i < a.length; i++) {
+        if (a[i].id !== b[i].id || a[i].title !== b[i].title || a[i].updatedAt !== b[i].updatedAt) {
+          return false
+        }
+      }
+      return true
+    }
+  )
+  
   const { height } = useTerminalSize()
   
   // Calculate available height
   const headerHeight = 1
   const footerHeight = 1
-  const tabBarHeight = tabs.length > 1 ? 1 : 0
+  const tabBarHeight = tabsLength > 1 ? 1 : 0
   const sidebarHeaderHeight = 2
   const sidebarFooterHeight = 1
   const availableHeight = height - headerHeight - footerHeight - tabBarHeight
   const listHeight = availableHeight - sidebarHeaderHeight - sidebarFooterHeight
-  
-  // Helper to create a filled line
-  const fillLine = (content: React.ReactNode, remaining: number) => (
-    <>
-      {content}
-      <Text backgroundColor={theme.backgroundPanel}>{' '.repeat(Math.max(0, remaining))}</Text>
-    </>
-  )
   
   return (
     <Box flexDirection="column" width={SIDEBAR_WIDTH}>
@@ -50,10 +64,10 @@ export default function Sidebar() {
           {' Sessions'}
         </Text>
         <Text backgroundColor={theme.backgroundPanel} color={theme.textMuted}>
-          {' '}({sessions.length})
+          {' '}({sessionsList.length})
         </Text>
         <Text backgroundColor={theme.backgroundPanel}>
-          {' '.repeat(Math.max(0, SIDEBAR_WIDTH - 12 - sessions.length.toString().length))}
+          {' '.repeat(Math.max(0, SIDEBAR_WIDTH - 12 - sessionsList.length.toString().length))}
         </Text>
       </Box>
       
@@ -66,7 +80,7 @@ export default function Sidebar() {
       
       {/* Session list */}
       <Box flexDirection="column" height={listHeight}>
-        {sessions.length === 0 ? (
+        {sessionsList.length === 0 ? (
           <Box>
             <Text backgroundColor={theme.backgroundPanel} color={theme.textMuted}>
               {' No sessions yet'}
@@ -76,9 +90,9 @@ export default function Sidebar() {
             </Text>
           </Box>
         ) : (
-          sessions.slice(0, listHeight).map((session) => {
+          sessionsList.slice(0, listHeight).map((session) => {
             const isSelected = session.id === currentSessionId
-            const maxTitleLen = SIDEBAR_WIDTH - 8 // prefix + time
+            const maxTitleLen = SIDEBAR_WIDTH - 8
             const truncatedTitle = session.title.length > maxTitleLen
               ? session.title.slice(0, maxTitleLen - 1) + '…'
               : session.title
@@ -109,20 +123,20 @@ export default function Sidebar() {
         )}
         
         {/* Fill remaining space */}
-        {Array.from({ length: Math.max(0, listHeight - Math.min(sessions.length, listHeight)) }).map((_, i) => (
+        {Array.from({ length: Math.max(0, listHeight - Math.min(sessionsList.length, listHeight)) }).map((_, i) => (
           <Box key={`fill-${i}`} height={1}>
             <Text backgroundColor={theme.backgroundPanel}>{' '.repeat(SIDEBAR_WIDTH)}</Text>
           </Box>
         ))}
         
         {/* Show more indicator */}
-        {sessions.length > listHeight && (
+        {sessionsList.length > listHeight && (
           <Box height={1}>
             <Text backgroundColor={theme.backgroundPanel} color={theme.textMuted}>
-              {' '}+{sessions.length - listHeight} more
+              {' '}+{sessionsList.length - listHeight} more
             </Text>
             <Text backgroundColor={theme.backgroundPanel}>
-              {' '.repeat(Math.max(0, SIDEBAR_WIDTH - 8 - (sessions.length - listHeight).toString().length))}
+              {' '.repeat(Math.max(0, SIDEBAR_WIDTH - 8 - (sessionsList.length - listHeight).toString().length))}
             </Text>
           </Box>
         )}

@@ -17,15 +17,18 @@ const KEYBINDS: KeybindSection[] = [
     title: 'Mode',
     bindings: [
       { key: 'i / Enter', desc: 'Insert mode' },
-      { key: 'Esc', desc: 'Normal mode' },
+      { key: 'v / j / k', desc: 'Scroll mode' },
+      { key: 'Esc / q', desc: 'Exit mode' },
     ],
   },
   {
-    title: 'Navigation',
+    title: 'Scroll Mode',
     bindings: [
-      { key: 'j / ↓', desc: 'Down' },
-      { key: 'k / ↑', desc: 'Up' },
-      { key: 'PgUp/Dn', desc: 'Page scroll' },
+      { key: 'j / k', desc: 'Scroll up/down' },
+      { key: 'g / G', desc: 'Top / bottom' },
+      { key: 'n / p', desc: 'Next/prev code' },
+      { key: 'y / c', desc: 'Copy code block' },
+      { key: 'Mouse', desc: 'Scroll wheel' },
     ],
   },
   {
@@ -68,14 +71,12 @@ const KEYBINDS: KeybindSection[] = [
     ],
   },
   {
-    title: 'Commands',
+    title: 'Slash Commands',
     bindings: [
       { key: '/help', desc: 'Show help' },
       { key: '/models', desc: 'Model selector' },
       { key: '/sessions', desc: 'Session list' },
-      { key: '/theme', desc: 'Theme selector' },
       { key: '/new', desc: 'New session' },
-      { key: '/quit', desc: 'Quit' },
     ],
   },
 ]
@@ -93,7 +94,7 @@ export default function HelpDialog({ width, height }: Props) {
       <Text color={theme.accent} bold>{section.title}</Text>
       {section.bindings.map((bind) => (
         <Box key={bind.key}>
-          <Box width={13}>
+          <Box width={14}>
             <Text color={theme.success}>{bind.key}</Text>
           </Box>
           <Text color={theme.textMuted}>{bind.desc}</Text>
@@ -108,7 +109,7 @@ export default function HelpDialog({ width, height }: Props) {
       <Box marginBottom={1}>
         <Text color={theme.accent} bold>Keybindings</Text>
         <Text color={theme.border}> │ </Text>
-        <Text color={theme.textMuted}>Vim-style navigation</Text>
+        <Text color={theme.textMuted}>Vim-style + mouse scroll</Text>
       </Box>
       
       {/* Two-column layout */}

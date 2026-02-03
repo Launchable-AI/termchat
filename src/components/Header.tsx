@@ -7,7 +7,13 @@ import { useTerminalSize } from '../hooks/useTerminalSize.js'
 const LOGO = 'termchat'
 
 export default function Header() {
-  const { theme, currentModel, isConnected, mode, isStreaming } = useStore()
+  // Use selective subscriptions
+  const theme = useStore(s => s.theme)
+  const currentModel = useStore(s => s.currentModel)
+  const isConnected = useStore(s => s.isConnected)
+  const mode = useStore(s => s.mode)
+  const isStreaming = useStore(s => s.isStreaming)
+  
   const { width } = useTerminalSize()
   
   // Format model name for display (short form)
@@ -21,17 +27,20 @@ export default function Header() {
   )
   
   // Mode indicator with color coding
-  const modeColor = mode === 'insert' ? theme.success : theme.textMuted
-  const modeText = mode === 'insert' ? 'INSERT' : 'NORMAL'
-  
-  // Fill the header line with background
-  const fillChar = ' '
+  const getModeDisplay = () => {
+    switch (mode) {
+      case 'insert':
+        return { color: theme.success, text: 'INSERT' }
+      case 'scroll':
+        return { color: theme.info, text: 'SCROLL' }
+      default:
+        return { color: theme.textMuted, text: 'NORMAL' }
+    }
+  }
+  const modeDisplay = getModeDisplay()
   
   return (
-    <Box
-      height={1}
-      width={width}
-    >
+    <Box height={1} width={width}>
       {/* Left side: Logo and model */}
       <Box>
         <Text backgroundColor={theme.backgroundPanel} color={theme.background}>
@@ -64,16 +73,16 @@ export default function Header() {
       
       {/* Spacer */}
       <Box flexGrow={1}>
-        <Text backgroundColor={theme.backgroundPanel}>{fillChar}</Text>
+        <Text backgroundColor={theme.backgroundPanel}> </Text>
       </Box>
       
       {/* Right side: Mode and hints */}
       <Box>
         <Text backgroundColor={theme.backgroundPanel} color={theme.textMuted}>
-          {mode === 'normal' ? 'ctrl+p ' : ''}
+          {mode === 'normal' ? 'ctrl+p ' : mode === 'scroll' ? 'q exit ' : ''}
         </Text>
-        <Text backgroundColor={modeColor} color={theme.background} bold>
-          {' '}{modeText}{' '}
+        <Text backgroundColor={modeDisplay.color} color={theme.background} bold>
+          {' '}{modeDisplay.text}{' '}
         </Text>
       </Box>
     </Box>

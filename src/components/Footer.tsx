@@ -5,28 +5,48 @@ import { useTerminalSize } from '../hooks/useTerminalSize.js'
 import { isFreeTierModel, isReasoningModel } from '../api/openrouter.js'
 
 export default function Footer() {
-  const { theme, mode, currentModel, getCurrentSession, themeName } = useStore()
+  // Use selective subscriptions
+  const theme = useStore(s => s.theme)
+  const mode = useStore(s => s.mode)
+  const currentModel = useStore(s => s.currentModel)
+  const themeName = useStore(s => s.themeName)
+  const codeBlocksLength = useStore(s => s.codeBlocks.length)
+  const selectedCodeBlockIndex = useStore(s => s.selectedCodeBlockIndex)
+  
+  // Get session stats with stable reference (only primitive values)
+  const sessionStats = useStore(
+    s => {
+      const session = s.sessions.find(sess => sess.id === s.currentSessionId)
+      if (!session) return { messageCount: 0, totalChars: 0 }
+      const totalChars = session.messages.reduce((acc, m) => acc + m.content.length, 0)
+      return { messageCount: session.messages.length, totalChars }
+    },
+    (a, b) => a.messageCount === b.messageCount && a.totalChars === b.totalChars
+  )
+  
   const { width } = useTerminalSize()
   
-  const session = getCurrentSession()
   const isFree = isFreeTierModel(currentModel)
   const isReasoning = isReasoningModel(currentModel)
   
   // Calculate stats
-  const messageCount = session?.messages.length || 0
-  const totalChars = session?.messages.reduce((acc, m) => acc + m.content.length, 0) || 0
-  const estimatedTokens = Math.round(totalChars / 4)
+  const messageCount = sessionStats.messageCount
+  const estimatedTokens = Math.round(sessionStats.totalChars / 4)
   
   // Contextual keybindings based on mode
   const keybindings = mode === 'insert' ? [
     { key: 'esc', desc: 'normal' },
     { key: 'enter', desc: 'send' },
+  ] : mode === 'scroll' ? [
+    { key: 'j/k', desc: 'scroll' },
+    { key: 'n/p', desc: 'code' },
+    { key: 'y', desc: 'copy' },
+    { key: 'q', desc: 'exit' },
   ] : [
     { key: 'i', desc: 'insert' },
+    { key: 'v', desc: 'scroll' },
     { key: 'm', desc: 'models' },
-    { key: 's', desc: 'sessions' },
     { key: '?', desc: 'help' },
-    { key: 'q', desc: 'quit' },
   ]
   
   return (
@@ -57,6 +77,11 @@ export default function Footer() {
             {messageCount} msgs  ~{estimatedTokens.toLocaleString()} tokens
           </Text>
         )}
+        {mode === 'scroll' && codeBlocksLength > 0 && (
+          <Text backgroundColor={theme.backgroundPanel} color={theme.textMuted}>
+            {'  '}code: {selectedCodeBlockIndex >= 0 ? selectedCodeBlockIndex + 1 : '-'}/{codeBlocksLength}
+          </Text>
+        )}
       </Box>
       
       {/* Spacer */}
@@ -70,12 +95,9 @@ export default function Footer() {
           {themeName}
         </Text>
         <Text backgroundColor={theme.backgroundPanel} color={theme.border}>
-          {' '}
+          {' '}│
         </Text>
-        <Text backgroundColor={theme.backgroundPanel} color={theme.border}>
-          │
-        </Text>
-        {keybindings.map((kb, i) => (
+        {keybindings.map((kb) => (
           <React.Fragment key={kb.key}>
             <Text backgroundColor={theme.backgroundPanel} color={theme.textMuted}>
               {' '}

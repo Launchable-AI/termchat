@@ -11,13 +11,13 @@ import ApiKeyDialog from './dialogs/ApiKeyDialog.js'
 
 // Dialog wrapper with dark overlay and centered modal
 function DialogWrapper({ children, width, height }: { children: React.ReactNode; width: number; height: number }) {
-  const { theme, setDialog } = useStore()
+  const theme = useStore(s => s.theme)
   const { width: termWidth, height: termHeight } = useTerminalSize()
   
   // Close on Escape
   useInput((input, key) => {
     if (key.escape) {
-      setDialog('none')
+      useStore.getState().setDialog('none')
     }
   })
   
@@ -110,7 +110,7 @@ function DialogWrapper({ children, width, height }: { children: React.ReactNode;
 }
 
 export default function Dialog() {
-  const { dialog, theme } = useStore()
+  const dialog = useStore(s => s.dialog)
   const { width, height } = useTerminalSize()
   
   if (dialog === 'none') return null
